@@ -1,6 +1,7 @@
 import torch
 import accelerate
 from torch import nn
+from pathlib import Path
 from tqdm.auto import tqdm
 from sklearn.metrics import f1_score
 
@@ -11,7 +12,8 @@ def train(model: nn.Module,
           optimizer: torch.optim.Optimizer,
           epochs: int,
           accelerator: accelerate.Accelerator,
-          scheduler: torch.optim.lr_scheduler._LRScheduler=None
+          scheduler: torch.optim.lr_scheduler._LRScheduler=None,
+          save_path: str|Path="/model/"
           ) -> dict:
     accelerator.print("[INFO] Starting training...")
 
@@ -41,6 +43,19 @@ def train(model: nn.Module,
               f"Val Loss: {epoch_val_loss:.4f} | Val F1: {epoch_val_f1:.4f}")
 
     accelerator.print("[INFO] Training Completed")
+    
+    # Save the model
+    accelerator.print("[INFO] Saving the model...")
+    try:
+        unwrapped_model = accelerator.unwrap_model(model)
+        unwrapped_model.save_pretrained(
+            save_path,
+            is_main_process=accelerator.is_main_process,
+            save_function=accelerator.save
+        )
+        accelerator.print("[INFO] Model was unwrapped and saved successfully!")    
+    except Exception as e:
+        accelerator.print(f"[INFO] Error when saving model. Error: {e}")
     return results
 
 def train_step(model: nn.Module,

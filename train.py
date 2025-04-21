@@ -1,4 +1,5 @@
 import torch
+import accelerate
 from torch import nn
 from tqdm.auto import tqdm
 from sklearn.metrics import f1_score
@@ -9,9 +10,11 @@ def train(model: nn.Module,
           loss_fn: nn.CrossEntropyLoss,
           optimizer: torch.optim.Optimizer,
           epochs: int,
-          device: str|torch.device=torch.device("cpu")) -> dict:
-    print("[INFO] Starting training...")
-    
+          accelerator: accelerate.Accelerator,
+          scheduler: torch.optim.lr_scheduler._LRScheduler=None
+          ) -> dict:
+    accelerator.print("[INFO] Starting training...")
+
     # Store history
     results = {
         "train_loss": [],
@@ -20,47 +23,53 @@ def train(model: nn.Module,
         "val_f1": []
     }
 
-    model.to(device) # Ensure model is on the correct device
+    model, optimizer, train_dataloader, val_dataloader, scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, val_dataloader, scheduler
+    )
     
     for epoch in tqdm(range(epochs)):
-        epoch_train_loss, epoch_train_f1 = train_step(model, train_dataloader, loss_fn, optimizer, device)
-        epoch_val_loss, epoch_val_f1 = val_step(model, val_dataloader, loss_fn, device)
+        epoch_train_loss, epoch_train_f1 = train_step(model, train_dataloader, loss_fn, optimizer, accelerator, scheduler)
+        epoch_val_loss, epoch_val_f1 = val_step(model, val_dataloader, loss_fn, accelerator)
         
         results["train_loss"].append(epoch_train_loss)
         results["train_f1"].append(epoch_train_f1)
         results["val_loss"].append(epoch_val_loss)
         results["val_f1"].append(epoch_val_f1)
         
-        print(f"Epoch {epoch+1}/{epochs} | "
+        accelerator.print(f"Epoch {epoch+1}/{epochs} | "
               f"Train Loss: {epoch_train_loss:.4f} | Train F1: {epoch_train_f1:.2f} | "
               f"Val Loss: {epoch_val_loss:.4f} | Val F1: {epoch_val_f1:.4f}")
 
-    print("[INFO] Training Completed")
+    accelerator.print("[INFO] Training Completed")
     return results
 
 def train_step(model: nn.Module,
                dataloader: torch.utils.data.DataLoader,
                loss_fn: nn.CrossEntropyLoss,
                optimizer: torch.optim.Optimizer,
-               device: str|torch.device):
+               accelerator: accelerate.Accelerator,
+               scheduler: torch.optim.lr_scheduler._LRScheduler=None):
     model.train()
     
     epoch_loss = 0
     all_preds, all_labels = [], []
     
-    progress_bar = tqdm(dataloader, desc="Training", leave=False) # leave parameter, for disabling progress bar after it's completed
+    progress_bar = tqdm(dataloader, desc="Training", leave=False, disable=not accelerator.is_main_process) # leave parameter, for disabling progress bar after it's completed
     
+    # Enable mixed precision
     for batch in progress_bar:
-        input_ids = batch['input_ids'].to(device)
-        attention_mask = batch['attention_mask'].to(device)
-        labels = batch['labels'].to(device)
+        optimizer.zero_grad()
         
-        logits = model(input_ids=input_ids, attention_mask=attention_mask)
-        loss = loss_fn(logits, labels)
+        input_ids = batch['input_ids']
+        attention_mask = batch['attention_mask']
+        labels = batch['labels']
+        
+        with accelerator.autocast():
+            logits = model(input_ids=input_ids, attention_mask=attention_mask)
+            loss = loss_fn(logits, labels)
         epoch_loss+=loss.item()
         
-        optimizer.zero_grad()
-        loss.backward()
+        accelerator.backward(loss)
         optimizer.step()
         
         preds = torch.argmax(logits, dim=-1)
@@ -69,6 +78,9 @@ def train_step(model: nn.Module,
         
         # Visualizing dynamically loss per batch in progress bar
         progress_bar.set_postfix(loss=loss.item())
+
+    if scheduler:
+        scheduler.step()
     
     avg_epoch_loss = epoch_loss/len(dataloader)
     avg_epoch_f1 = f1_score(y_true=all_labels, y_pred=all_preds, average="micro")
@@ -78,7 +90,8 @@ def train_step(model: nn.Module,
 def val_step(model: nn.Module,
              dataloader: torch.utils.data.DataLoader,
              loss_fn: nn.CrossEntropyLoss,
-             device: str|torch.device):
+             accelerator: accelerate.Accelerator,
+             ):
     epoch_loss = 0
     all_preds, all_labels = [], []
     
@@ -88,9 +101,9 @@ def val_step(model: nn.Module,
     
     with torch.inference_mode():
         for batch in progress_bar:
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['labels'].to(device)
+            input_ids = batch['input_ids']
+            attention_mask = batch['attention_mask']
+            labels = batch['labels']
             
             logits = model(input_ids=input_ids, attention_mask=attention_mask)
             

@@ -13,7 +13,8 @@ def train(model: nn.Module,
           epochs: int,
           accelerator: accelerate.Accelerator,
           scheduler: torch.optim.lr_scheduler._LRScheduler=None,
-          save_path: str|Path="/model/"
+          f1_avg_mode:str='micro',
+          save_path: str|Path= "./finetuned_model/"
           ) -> dict:
     accelerator.print("[INFO] Starting training...")
 
@@ -30,13 +31,15 @@ def train(model: nn.Module,
     )
     
     for epoch in tqdm(range(epochs)):
-        epoch_train_loss, epoch_train_f1 = train_step(model, train_dataloader, loss_fn, optimizer, accelerator, scheduler)
-        epoch_val_loss, epoch_val_f1 = val_step(model, val_dataloader, loss_fn, accelerator)
-          if scheduler:
-                    if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateu):
-                              scheduler.step(epoch_val_loss) # Or another metric like val_f1
-                    else:
-                              scheduler.step()
+        epoch_train_loss, epoch_train_f1 = train_step(model, train_dataloader, loss_fn, optimizer, accelerator, scheduler, f1_avg_mode)
+        epoch_val_loss, epoch_val_f1 = val_step(model, val_dataloader, loss_fn, accelerator, f1_avg_mode)
+        
+        # Epoch level scheduler
+        if scheduler:
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateu):
+                scheduler.step(epoch_val_loss) # Or another metric like val_f1
+            else:
+                scheduler.step()
         
         results["train_loss"].append(epoch_train_loss)
         results["train_f1"].append(epoch_train_f1)
@@ -68,7 +71,8 @@ def train_step(model: nn.Module,
                loss_fn: nn.CrossEntropyLoss,
                optimizer: torch.optim.Optimizer,
                accelerator: accelerate.Accelerator,
-               scheduler: torch.optim.lr_scheduler._LRScheduler=None):
+               scheduler: torch.optim.lr_scheduler._LRScheduler,
+               f1_avg_mode: str):
     model.train()
     
     epoch_loss = 0
@@ -98,7 +102,7 @@ def train_step(model: nn.Module,
         # if scheduler and isinstance(scheduler, StepBasedScheduler):
         #     scheduler.step()
 
-        all_logits.append(accelerator.gather_for_metrics(logits.detach())
+        all_logits.append(accelerator.gather_for_metrics(logits.detach()))
         all_labels_list.append(accelerator.gather_for_metrics(labels))
         
         # Visualizing dynamically loss per batch in progress bar
@@ -108,10 +112,12 @@ def train_step(model: nn.Module,
     all_logits_cat = torch.cat(all_logits)
     all_labels_cat = torch.cat(all_labels_list)
 
-    all_
+    all_preds_cat = torch.argmax(all_logits_cat, dim=-1)
 
-    avg_epoch_loss = epoch_loss/len(dataloader)
-    avg_epoch_f1 = f1_score(y_true=all_labels, y_pred=all_preds, average="micro")
+    avg_epoch_f1 = f1_score(y_true=all_labels_cat.cpu().numpy(), y_pred=all_preds_cat.cpu().numpy(), average=f1_avg_mode)
+    
+    total_samples = len(dataloader.dataset) # Assumes dataloader has .dataset attribute
+    avg_epoch_loss = epoch_loss / total_samples
     
     return avg_epoch_loss, avg_epoch_f1
     
@@ -119,9 +125,10 @@ def val_step(model: nn.Module,
              dataloader: torch.utils.data.DataLoader,
              loss_fn: nn.CrossEntropyLoss,
              accelerator: accelerate.Accelerator,
+             f1_avg_mode:str,
              ):
     epoch_loss = 0
-    all_preds, all_labels = [], []
+    all_logits, all_labels_list = [], []
     
     model.eval()
     
@@ -133,20 +140,28 @@ def val_step(model: nn.Module,
             attention_mask = batch['attention_mask']
             labels = batch['labels']
             
-            logits = model(input_ids=input_ids, attention_mask=attention_mask)
+            with accelerator.autocast():
+                logits = model(input_ids=input_ids, attention_mask=attention_mask)
+                loss = loss_fn(logits, labels)
+                
+            epoch_loss += loss.item() * input_ids.size(0)
             
-            loss = loss_fn(logits, labels)
-            epoch_loss += loss.item()
-            preds = torch.argmax(logits, dim=-1)
-            
-            all_labels.extend(labels.cpu().numpy())
-            all_preds.extend(preds.cpu().numpy())
+            all_logits.append(accelerator.gather_for_metrics(logits.detach()))
+            all_labels_list.append(accelerator.gather_for_metrics(labels))
             
             # Visualizing dynamically loss per batch in progress bar
             if accelerator.is_main_process:
-                      progress_bar.set_postfix(loss=loss.item())
+                progress_bar.set_postfix(loss=loss.item())
+            
+    all_logits_cat = torch.cat(all_logits)
+    all_labels_cat = torch.cat(all_labels_list)
     
-    avg_epoch_loss = epoch_loss / len(dataloader)
-    avg_epoch_f1 = f1_score(y_true=all_labels, y_pred=all_preds, average='micro')
+    all_preds_cat = torch.argmax(all_logits_cat, dim=-1)
+    
+    avg_epoch_f1 = f1_score(y_true=all_labels_cat.cpu().numpy(), y_pred=all_preds_cat.cpu().numpy(), average=f1_avg_mode)
+    
+     # Calculate average loss for the epoch
+    total_samples = len(dataloader.dataset)
+    avg_epoch_loss = epoch_loss / total_samples
     
     return avg_epoch_loss, avg_epoch_f1

@@ -14,6 +14,7 @@ def train(model: nn.Module,
           accelerator: accelerate.Accelerator,
           scheduler: torch.optim.lr_scheduler._LRScheduler=None,
           f1_avg_mode:str='micro',
+          checkpoint_every_n_epochs: int = 1,           # How often to save
           save_path: str|Path= "./finetuned_model/"
           ) -> dict:
     accelerator.print("[INFO] Starting training...")
@@ -49,12 +50,33 @@ def train(model: nn.Module,
         accelerator.print(f"Epoch {epoch+1}/{epochs} | "
               f"Train Loss: {epoch_train_loss:.4f} | Train F1: {epoch_train_f1:.2f} | "
               f"Val Loss: {epoch_val_loss:.4f} | Val F1: {epoch_val_f1:.4f}")
+        
+        if checkpoint_every_n_epochs > 0 and epoch+1 % checkpoint_every_n_epochs == 0:
+            checkpoint_path = save_path / f"epoch_{epoch+1}"
+            accelerator.print(f"[INFO] Saving checkpoint for epoch {epoch+1} to {checkpoint_path}...")
+            
+            if accelerator.is_main_process:
+                checkpoint_path.mkdir(parents=True, exist_ok=True)
+            
+            accelerator.wait_for_everyone() # Wait until all processes finish
+            try:
+                accelerator.save_state(output_dir=checkpoint_path)
+                accelerator.print(f"[INFO] Checkpoint saved successfully.")
+            except Exception as e:
+                accelerator.print(f"[INFO] Failed to save checkpoint. Error: {e}")
 
     accelerator.print("[INFO] Training Completed")
     
     # Save the model
     accelerator.print("[INFO] Saving the model...")
+    
     try:
+        if accelerator.is_main_process:
+            save_path = Path(save_path)
+            save_path.mkdir(parents=True, exist_ok=True)
+        
+        accelerator.wait_for_everyone()
+        
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(
             save_path,

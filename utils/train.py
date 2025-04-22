@@ -1,3 +1,4 @@
+import wandb
 import torch
 import accelerate
 from torch import nn
@@ -46,6 +47,14 @@ def train(model: nn.Module,
         results["train_f1"].append(epoch_train_f1)
         results["val_loss"].append(epoch_val_loss)
         results["val_f1"].append(epoch_val_f1)
+        
+        # Log via wandb
+        wandb.log({
+            "train_loss": results['train_loss'],
+            "train_f1": results['train_f1'],
+            "val_loss": results['val_loss'],
+            "val_f1": results['val_f1']
+        })
         
         accelerator.print(f"Epoch {epoch+1}/{epochs} | "
               f"Train Loss: {epoch_train_loss:.4f} | Train F1: {epoch_train_f1:.2f} | "

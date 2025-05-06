@@ -35,7 +35,7 @@ def create_qwen25_classifier(
     # Initialize the classifier
     model = Qwen25Classifier(config=config, base_model=base_model, num_classes=num_classes).to(device)
     
-    # Freeze the layers
+    # Freeze all the layers
     for param in model.parameters():
         param.requires_grad = False
     
@@ -49,9 +49,11 @@ def create_qwen25_classifier(
         for param in model.qwen_base.norm.parameters():
             param.requires_grad = True
             
-    
-    # Work with decoder layers
-    
+    # Unfreeze the last n decoder layers
+    total_layers = len(model.qwen_base.layers)
+    for i in range(total_layers - num_decoder_layers_to_unfreeze, total_layers):
+        for param in model.qwen_base.layers[i].parameters():
+            param.requires_grad = True
     
     # Initialize tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_id)

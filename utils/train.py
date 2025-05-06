@@ -22,15 +22,21 @@ def train(model: nn.Module,
 
     # Store history
     results = {
+        "epochs": [],
         "train_loss": [],
         "train_f1": [],
         "val_loss": [],
         "val_f1": []
     }
 
-    model, optimizer, train_dataloader, val_dataloader, scheduler = accelerator.prepare(
-        model, optimizer, train_dataloader, val_dataloader, scheduler
-    )
+    if scheduler:
+        model, optimizer, train_dataloader, val_dataloader, scheduler = accelerator.prepare(
+            model, optimizer, train_dataloader, val_dataloader, scheduler
+        )
+    else:
+        model, optimizer, train_dataloader, val_dataloader = accelerator.prepare(
+            model, optimizer, train_dataloader, val_dataloader
+        )
     
     for epoch in tqdm(range(epochs)):
         epoch_train_loss, epoch_train_f1 = train_step(model, train_dataloader, loss_fn, optimizer, accelerator, scheduler, f1_avg_mode)
@@ -43,13 +49,14 @@ def train(model: nn.Module,
             else:
                 scheduler.step()
         
+        results["epochs"].append(epoch + 1)
         results["train_loss"].append(epoch_train_loss)
         results["train_f1"].append(epoch_train_f1)
         results["val_loss"].append(epoch_val_loss)
         results["val_f1"].append(epoch_val_f1)
         
-        # Log via wandb
         wandb.log({
+            "epoch": epoch + 1,
             "train_loss": results['train_loss'],
             "train_f1": results['train_f1'],
             "val_loss": results['val_loss'],

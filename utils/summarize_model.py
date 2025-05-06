@@ -1,12 +1,19 @@
 from torchinfo import summary
 
-def summarize_model(model, inputs: dict):
-    """Summarize the model using torchinfo.
+def summarize_model(model, tokenizer, prompt: str):
+    """Summarize the model using torchinfo. The prompt is going to be tokenized
+    and passed to the model. The summary will include input size, output size,
+    number of parameters, and trainable parameters.
+    The summary will be printed in a table format.
 
     Args:
         model: The model to be summarized.
-        inputs (dict): Tokenized inputs for the model.
+        prompt (str): The input prompt for the model.
     """
+    inputs = tokenizer(
+        prompt,
+        return_tensors="pt"
+    )
     
     # assume `inputs` is your BatchEncoding
     plain_inputs = {

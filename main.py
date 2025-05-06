@@ -1,37 +1,113 @@
 import os
 import wandb
+import torch
+from utils.train import train
 from huggingface_hub import login
+from accelerate import Accelerator
+from utils.constants import MODEL_ID
+from utils.summarize_model import summarize_model
+from utils.create_dataloaders import create_dataloaders
+from utils.create_model import create_qwen25_classifier
 
 def main():
     # Logins
     wandb.login(key=os.environ.get("WANDB_TOKEN"))
     login(token=os.environ.get("HF_TOKEN"))
     
+    # Create the model and tokenizer
+    model, tokenizer = create_qwen25_classifier(
+        model_id=MODEL_ID,
+        num_classes=8,
+        freeze_norm_layer=False,
+        freeze_embedding=True,
+        num_decoder_layers_to_unfreeze=5,
+        device="cuda"
+    )
     
+    # Print the model summary
+    summarize_model(model, tokenizer, prompt="Hello World!")
     
+    # Create train and val dataloaders
+    train_data_path = "dataset/preprocessed/train.csv"
+    val_data_path = "dataset/preprocessed/val.csv"
+    BATCH_SIZE = 2
+    NUM_WORKERS = os.cpu_count()
     
+    train_dataloader, val_dataloader = create_dataloaders(
+        train_dataset_path=train_data_path,
+        val_dataset_path=val_data_path,
+        batch_size=BATCH_SIZE,
+        num_workers=NUM_WORKERS,
+        tokenizer=tokenizer,
+    )
     
+    # Set up the hyperparameters
+    LEARNING_RATES = {
+        ""
+    }
+    EPOCHS = 3
+    WEIGHT_DECAY = 0.01
+    LABEL_SMOOTHING = 0.1
+    GRADIENT_ACCUMULATION_STEPS = 1
     
+    # Set up the accelerator
+    accelerator = Accelerator(
+        device_placement=True,
+        split_batches=True,
+        mixed_precision="fp16",
+        gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
+        cpu=False
+    )
     
+    # Set up the loss function
+    loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=LABEL_SMOOTHING)
     
+    # Set up the optimizer
+    optimizer = torch.optim.AdamW(
+        params=model.parameters(),
+        lr=LEARNING_RATES,
+        weight_decay=WEIGHT_DECAY
+    )
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    # Config
+    config = {
+        "learning_rate": LEARNING_RATES,
+        "epochs": EPOCHS,
+        "batch_size": BATCH_SIZE,
+        "weight_decay": WEIGHT_DECAY,
+        "label_smoothing": LABEL_SMOOTHING,
+        "gradient_accumulation_steps": GRADIENT_ACCUMULATION_STEPS,
+        "num_workers": NUM_WORKERS,
+    }
     
     # Initialize wandb before training
     wandb.init(
-        project='', # Project name
+        project='qwen25_math_classifier', # Project name
         name='1st', # Run name
-        config="" # Train config: lr, epochs and etc
+        config=config # Train config: lr, epochs and etc
     )
+    
+    # Train the model
+    results = train(
+        model=model,
+        train_dataloader=train_dataloader,
+        val_dataloader=val_dataloader,
+        loss_fn=loss_fn,
+        optimizer=optimizer,
+        epochs=EPOCHS,
+        accelerator=accelerator,
+        f1_avg_mode="macro",
+        checkpoint_every_n_epochs=1,
+        save_path="./finetuned_model/"
+    )
+    
+    
+    
+    
+    
+    
+    
+    
     
     
     

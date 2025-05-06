@@ -38,6 +38,10 @@ def create_qwen25_classifier(
     # Freeze all the layers
     for param in model.parameters():
         param.requires_grad = False
+        
+    # Unfreeze the classifier layer
+    for param in model.classifier.parameters():
+        param.requires_grad = True
     
     # Embedding layer
     if not freeze_embedding:

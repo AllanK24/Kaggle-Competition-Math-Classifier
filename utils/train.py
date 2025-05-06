@@ -37,6 +37,9 @@ def train(model: nn.Module,
         model, optimizer, train_dataloader, val_dataloader = accelerator.prepare(
             model, optimizer, train_dataloader, val_dataloader
         )
+        
+    if isinstance(save_path, str):
+        save_path = Path(save_path)
     
     for epoch in tqdm(range(epochs)):
         epoch_train_loss, epoch_train_f1 = train_step(model, train_dataloader, loss_fn, optimizer, accelerator, scheduler, f1_avg_mode)
@@ -57,10 +60,10 @@ def train(model: nn.Module,
         
         wandb.log({
             "epoch": epoch + 1,
-            "train_loss": results['train_loss'],
-            "train_f1": results['train_f1'],
-            "val_loss": results['val_loss'],
-            "val_f1": results['val_f1']
+            "train_loss": epoch_train_loss,
+            "train_f1": epoch_train_f1,
+            "val_loss": epoch_val_loss,
+            "val_f1": epoch_val_f1
         })
         
         accelerator.print(f"Epoch {epoch+1}/{epochs} | "
@@ -116,7 +119,13 @@ def train_step(model: nn.Module,
     epoch_loss = 0
     all_logits, all_labels_list = [], []
     
-    progress_bar = tqdm(dataloader, desc="Training", leave=False, disable=not accelerator.is_main_process) # leave parameter, for disabling progress bar after it's completed
+    # progress_bar = tqdm(dataloader, desc="Training", leave=False, disable=not accelerator.is_main_process) # leave parameter, for disabling progress bar after it's completed
+    
+    if accelerator.is_main_process:
+        progress_bar = tqdm(dataloader, desc="Training", leave=False)
+    else:
+        progress_bar = dataloader  # dummy iterator for non-main processes
+
     
     # Enable mixed precision
     for batch in progress_bar:
@@ -124,7 +133,7 @@ def train_step(model: nn.Module,
         
         input_ids = batch['input_ids']
         attention_mask = batch['attention_mask']
-        labels = batch['labels']
+        labels = batch['label']
         
         with accelerator.autocast():
             logits = model(input_ids=input_ids, attention_mask=attention_mask)
@@ -170,13 +179,19 @@ def val_step(model: nn.Module,
     
     model.eval()
     
-    progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
+    # progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
+    
+    if accelerator.is_main_process:
+        progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
+    else:
+        progress_bar = dataloader  # dummy iterator for non-main processes
+
     
     with torch.inference_mode():
         for batch in progress_bar:
             input_ids = batch['input_ids']
             attention_mask = batch['attention_mask']
-            labels = batch['labels']
+            labels = batch['label']
             
             with accelerator.autocast():
                 logits = model(input_ids=input_ids, attention_mask=attention_mask)

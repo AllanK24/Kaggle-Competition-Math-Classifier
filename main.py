@@ -10,6 +10,10 @@ from utils.create_dataloaders import create_dataloaders
 from utils.create_model import create_qwen25_classifier
 
 def main():
+    torch._dynamo.config.suppress_errors = True
+    
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    
     # Logins
     wandb.login(key=os.environ.get("WANDB_TOKEN"))
     login(token=os.environ.get("HF_TOKEN"))
@@ -36,6 +40,7 @@ def main():
     train_dataloader, val_dataloader = create_dataloaders(
         train_dataset_path=train_data_path,
         val_dataset_path=val_data_path,
+        shuffle=True,
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
         tokenizer=tokenizer,
@@ -43,29 +48,33 @@ def main():
     
     # Set up the hyperparameters
     LEARNING_RATES = {
-        ""
+        "base_model": 2e-5,
+        "classifier": 1e-4,
     }
     EPOCHS = 3
-    WEIGHT_DECAY = 0.01
+    WEIGHT_DECAY = 0.001
     LABEL_SMOOTHING = 0.1
-    GRADIENT_ACCUMULATION_STEPS = 1
+    # GRADIENT_ACCUMULATION_STEPS = 1
     
     # Set up the accelerator
     accelerator = Accelerator(
         device_placement=True,
         split_batches=True,
         mixed_precision="fp16",
-        gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
+        # gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
         cpu=False
     )
+    print(f"Using {accelerator.num_processes} GPUs")  # Should print 2
     
     # Set up the loss function
     loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=LABEL_SMOOTHING)
     
     # Set up the optimizer
     optimizer = torch.optim.AdamW(
-        params=model.parameters(),
-        lr=LEARNING_RATES,
+        [
+            {'params': model.qwen_base.parameters(), 'lr': LEARNING_RATES["base_model"]}, 
+            {'params': model.classifier.parameters(), 'lr': LEARNING_RATES["classifier"]},
+        ],
         weight_decay=WEIGHT_DECAY
     )
     
@@ -76,7 +85,7 @@ def main():
         "batch_size": BATCH_SIZE,
         "weight_decay": WEIGHT_DECAY,
         "label_smoothing": LABEL_SMOOTHING,
-        "gradient_accumulation_steps": GRADIENT_ACCUMULATION_STEPS,
+        # "gradient_accumulation_steps": GRADIENT_ACCUMULATION_STEPS,
         "num_workers": NUM_WORKERS,
     }
     
@@ -101,36 +110,8 @@ def main():
         save_path="./finetuned_model/"
     )
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     # Finish wandb run
     wandb.finish()
 
 if __name__=="__main__":
-    pass
+    main()

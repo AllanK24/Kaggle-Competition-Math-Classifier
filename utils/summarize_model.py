@@ -13,7 +13,7 @@ def summarize_model(model, tokenizer, prompt: str):
     inputs = tokenizer(
         prompt,
         return_tensors="pt"
-    )
+    ).to("cuda")
     
     # assume `inputs` is your BatchEncoding
     plain_inputs = {

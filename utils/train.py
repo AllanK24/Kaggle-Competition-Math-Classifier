@@ -3,9 +3,10 @@ import torch
 import accelerate
 from torch import nn
 from pathlib import Path
-# from tqdm.auto import tqdm
+from peft import PeftModel
 from sklearn.metrics import f1_score
 from accelerate.utils.tqdm import tqdm
+from save_adapter_only import save_adapter_only
 
 def train(model: nn.Module,
           train_dataloader: torch.utils.data.DataLoader,
@@ -80,11 +81,19 @@ def train(model: nn.Module,
                 checkpoint_path.mkdir(parents=True, exist_ok=True)
             
             accelerator.wait_for_everyone() # Wait until all processes finish
-            try:
-                accelerator.save_state(output_dir=checkpoint_path)
-                accelerator.print(f"[INFO] Checkpoint saved successfully.")
-            except Exception as e:
-                accelerator.print(f"[INFO] Failed to save checkpoint. Error: {e}")
+            
+            # Save the model
+            ## If using LoRA, save only the adapter weights
+            unwrapped_model = accelerator.unwrap_model(model)
+            if isinstance(unwrapped_model, PeftModel):
+                save_adapter_only(unwrapped_model, checkpoint_path, accelerator)
+            # If LoRA isn't used, checkpoint the whole model
+            else:
+                try:
+                    accelerator.save_state(output_dir=checkpoint_path)
+                    accelerator.print(f"[INFO] Checkpoint saved successfully.")
+                except Exception as e:
+                    accelerator.print(f"[INFO] Failed to save checkpoint. Error: {e}")
 
     accelerator.print("[INFO] Training Completed")
     
@@ -99,10 +108,15 @@ def train(model: nn.Module,
         accelerator.wait_for_everyone()
         
         unwrapped_model = accelerator.unwrap_model(model)
+        
+        if isinstance(unwrapped_model, PeftModel):
+            unwrapped_model = unwrapped_model.merge_and_unload() # returns plain AutoModel
+        
         unwrapped_model.save_pretrained(
             save_path,
             is_main_process=accelerator.is_main_process,
-            save_function=accelerator.save
+            save_function=accelerator.save,
+            safe_serialization=True,
         )
         accelerator.print("[INFO] Model was unwrapped and saved successfully!")    
     except Exception as e:
@@ -121,13 +135,14 @@ def train_step(model: nn.Module,
     epoch_loss = 0
     all_logits, all_labels_list = [], []
     
-    progress_bar = tqdm(dataloader, desc="Training", leave=False) # leave parameter, for disabling progress bar after it's completed
+    # progress_bar = tqdm(dataloader, desc="Training", leave=False) # leave parameter, for disabling progress bar after it's completed
     
     # if accelerator.is_main_process:
     #     progress_bar = tqdm(dataloader, desc="Training", leave=False, dynamic_ncols=True, position=1)
     # else:
     #     progress_bar = dataloader  # dummy iterator for non-main processes
 
+    progress_bar = dataloader
     
     # Enable mixed precision
     for batch in progress_bar:
@@ -157,7 +172,7 @@ def train_step(model: nn.Module,
         # Visualizing dynamically loss per batch in progress bar
         # if accelerator.is_main_process:
         #     progress_bar.set_postfix(loss=loss.item())
-        progress_bar.set_postfix(loss=loss.item())
+        # progress_bar.set_postfix(loss=loss.item())
 
     all_logits_cat = torch.cat(all_logits)
     all_labels_cat = torch.cat(all_labels_list)
@@ -182,13 +197,14 @@ def val_step(model: nn.Module,
     
     model.eval()
     
-    progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
+    # progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
     
     # if accelerator.is_main_process:
     #     progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
     # else:
     #     progress_bar = dataloader  # dummy iterator for non-main processes
 
+    progress_bar = dataloader
     
     with torch.inference_mode():
         for batch in progress_bar:
@@ -208,7 +224,7 @@ def val_step(model: nn.Module,
             # Visualizing dynamically loss per batch in progress bar
             # if accelerator.is_main_process:
             #     progress_bar.set_postfix(loss=loss.item())
-            progress_bar.set_postfix(loss=loss.item())
+            # progress_bar.set_postfix(loss=loss.item())
             
     all_logits_cat = torch.cat(all_logits)
     all_labels_cat = torch.cat(all_labels_list)

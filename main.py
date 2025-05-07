@@ -12,7 +12,7 @@ from utils.create_model import create_qwen25_classifier
 
 def main():
     # Set the seed for reproducibility
-    set_seed(42, deterministic=True)
+    set_seed(42)
     
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True

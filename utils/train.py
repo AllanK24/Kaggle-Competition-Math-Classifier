@@ -6,7 +6,7 @@ from pathlib import Path
 from peft import PeftModel
 from sklearn.metrics import f1_score
 from accelerate.utils.tqdm import tqdm
-from save_adapter_only import save_adapter_only
+from utils.save_adapter_only import save_adapter_only
 
 def train(model: nn.Module,
           train_dataloader: torch.utils.data.DataLoader,

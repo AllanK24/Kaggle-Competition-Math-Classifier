@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from peft import LoraConfig
-from qwen25_classifier import Qwen25Classifier
+from utils.qwen25.qwen25_classifier import Qwen25Classifier
 from transformers import AutoConfig, AutoTokenizer, AutoModel
 
 def create_qwen25_classifier(
@@ -10,6 +10,8 @@ def create_qwen25_classifier(
     freeze_norm_layer: bool=False,
     freeze_embedding: bool=True,
     num_decoder_layers_to_unfreeze:int=5,
+    add_dropout: bool=False,
+    dropout_prob: float=0.1,
     device:str|torch.device="cpu"
 ) -> tuple[nn.Module, AutoTokenizer]:
     """This function creates a Qwen 2.5 Classifier model and tokenizer.
@@ -34,7 +36,8 @@ def create_qwen25_classifier(
     base_model = AutoModel.from_pretrained(model_id, config=config)
     
     # Initialize the classifier
-    model = Qwen25Classifier(config=config, base_model=base_model, num_classes=num_classes).to(device)
+    model = Qwen25Classifier(config=config, base_model=base_model, num_classes=num_classes, add_dropout=add_dropout,
+    dropout_prob=dropout_prob).to(device)
     
     # Freeze all the layers
     for param in model.parameters():

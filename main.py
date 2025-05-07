@@ -8,7 +8,8 @@ from utils.constants import MODEL_ID
 from accelerate.utils import set_seed
 from utils.summarize_model import summarize_model
 from utils.create_dataloaders import create_dataloaders
-from utils.create_model import create_qwen25_classifier
+from utils.qwen25.create_qwen25 import create_qwen25_classifier
+from utils.llama32.create_llama32 import create_llama32_classifier
 
 def main():
     # Set the seed for reproducibility
@@ -21,8 +22,13 @@ def main():
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     
     # Logins
-    wandb.login(key=os.environ.get("WANDB_TOKEN"))
-    login(token=os.environ.get("HF_TOKEN"))
+    from kaggle_secrets import UserSecretsClient
+    user_secrets = UserSecretsClient()
+    secret_value_0 = user_secrets.get_secret("HF_TOKEN")
+    secret_value_1 = user_secrets.get_secret("WANDB")
+    
+    wandb.login(key=secret_value_1)
+    login(token=secret_value_0)
     
     # Create the model and tokenizer
     model, tokenizer = create_qwen25_classifier(
@@ -38,8 +44,8 @@ def main():
     summarize_model(model, tokenizer, prompt="Hello World!")
     
     # Create train and val dataloaders
-    train_data_path = "dataset/preprocessed/train.csv"
-    val_data_path = "dataset/preprocessed/val.csv"
+    train_data_path = "/kaggle/input/math-classifier-competition/train.csv"
+    val_data_path = "/kaggle/input/math-classifier-competition/val.csv"
     BATCH_SIZE = 2
     NUM_WORKERS = os.cpu_count()
     
@@ -86,6 +92,7 @@ def main():
     
     # Config
     config = {
+        "model_id": MODEL_ID,
         "learning_rate": LEARNING_RATES,
         "epochs": EPOCHS,
         "batch_size": BATCH_SIZE,
@@ -93,6 +100,10 @@ def main():
         "label_smoothing": LABEL_SMOOTHING,
         # "gradient_accumulation_steps": GRADIENT_ACCUMULATION_STEPS,
         "num_workers": NUM_WORKERS,
+        "dropout": 0.1,
+        "freeze_norm_layer": False,
+        "freeze_embedding": True,
+        "num_decoder_layers_to_unfreeze": 5,
     }
     
     if accelerator.is_main_process:

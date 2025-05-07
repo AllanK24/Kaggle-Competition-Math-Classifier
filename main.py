@@ -5,11 +5,17 @@ from utils.train import train
 from huggingface_hub import login
 from accelerate import Accelerator
 from utils.constants import MODEL_ID
+from accelerate.utils import set_seed
 from utils.summarize_model import summarize_model
 from utils.create_dataloaders import create_dataloaders
 from utils.create_model import create_qwen25_classifier
 
 def main():
+    # Set the seed for reproducibility
+    set_seed(42, deterministic=True)
+    
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
     torch._dynamo.config.suppress_errors = True
     
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -89,12 +95,13 @@ def main():
         "num_workers": NUM_WORKERS,
     }
     
-    # Initialize wandb before training
-    wandb.init(
-        project='qwen25_math_classifier', # Project name
-        name='1st', # Run name
-        config=config # Train config: lr, epochs and etc
-    )
+    if accelerator.is_main_process:
+        # Initialize wandb before training
+        wandb.init(
+            project='qwen25_math_classifier', # Project name
+            name='1st', # Run name
+            config=config # Train config: lr, epochs and etc
+        )
     
     # Train the model
     results = train(

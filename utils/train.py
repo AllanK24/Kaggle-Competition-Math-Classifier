@@ -3,8 +3,9 @@ import torch
 import accelerate
 from torch import nn
 from pathlib import Path
-from tqdm.auto import tqdm
+# from tqdm.auto import tqdm
 from sklearn.metrics import f1_score
+from accelerate.utils.tqdm import tqdm
 
 def train(model: nn.Module,
           train_dataloader: torch.utils.data.DataLoader,
@@ -41,7 +42,7 @@ def train(model: nn.Module,
     if isinstance(save_path, str):
         save_path = Path(save_path)
     
-    for epoch in tqdm(range(epochs)):
+    for epoch in tqdm(range(epochs), desc="Epochs", leave=True):
         epoch_train_loss, epoch_train_f1 = train_step(model, train_dataloader, loss_fn, optimizer, accelerator, scheduler, f1_avg_mode)
         epoch_val_loss, epoch_val_f1 = val_step(model, val_dataloader, loss_fn, accelerator, f1_avg_mode)
         
@@ -58,13 +59,14 @@ def train(model: nn.Module,
         results["val_loss"].append(epoch_val_loss)
         results["val_f1"].append(epoch_val_f1)
         
-        wandb.log({
-            "epoch": epoch + 1,
-            "train_loss": epoch_train_loss,
-            "train_f1": epoch_train_f1,
-            "val_loss": epoch_val_loss,
-            "val_f1": epoch_val_f1
-        })
+        if accelerator.is_main_process:
+            wandb.log({
+                "epoch": epoch + 1,
+                "train_loss": epoch_train_loss,
+                "train_f1": epoch_train_f1,
+                "val_loss": epoch_val_loss,
+                "val_f1": epoch_val_f1
+            })
         
         accelerator.print(f"Epoch {epoch+1}/{epochs} | "
               f"Train Loss: {epoch_train_loss:.4f} | Train F1: {epoch_train_f1:.2f} | "
@@ -119,12 +121,12 @@ def train_step(model: nn.Module,
     epoch_loss = 0
     all_logits, all_labels_list = [], []
     
-    # progress_bar = tqdm(dataloader, desc="Training", leave=False, disable=not accelerator.is_main_process) # leave parameter, for disabling progress bar after it's completed
+    progress_bar = tqdm(dataloader, desc="Training", leave=False) # leave parameter, for disabling progress bar after it's completed
     
-    if accelerator.is_main_process:
-        progress_bar = tqdm(dataloader, desc="Training", leave=False)
-    else:
-        progress_bar = dataloader  # dummy iterator for non-main processes
+    # if accelerator.is_main_process:
+    #     progress_bar = tqdm(dataloader, desc="Training", leave=False, dynamic_ncols=True, position=1)
+    # else:
+    #     progress_bar = dataloader  # dummy iterator for non-main processes
 
     
     # Enable mixed precision
@@ -153,8 +155,9 @@ def train_step(model: nn.Module,
         all_labels_list.append(accelerator.gather_for_metrics(labels))
         
         # Visualizing dynamically loss per batch in progress bar
-        if accelerator.is_main_process:
-                  progress_bar.set_postfix(loss=loss.item())
+        # if accelerator.is_main_process:
+        #     progress_bar.set_postfix(loss=loss.item())
+        progress_bar.set_postfix(loss=loss.item())
 
     all_logits_cat = torch.cat(all_logits)
     all_labels_cat = torch.cat(all_labels_list)
@@ -179,12 +182,12 @@ def val_step(model: nn.Module,
     
     model.eval()
     
-    # progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
+    progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
     
-    if accelerator.is_main_process:
-        progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
-    else:
-        progress_bar = dataloader  # dummy iterator for non-main processes
+    # if accelerator.is_main_process:
+    #     progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
+    # else:
+    #     progress_bar = dataloader  # dummy iterator for non-main processes
 
     
     with torch.inference_mode():
@@ -203,8 +206,9 @@ def val_step(model: nn.Module,
             all_labels_list.append(accelerator.gather_for_metrics(labels))
             
             # Visualizing dynamically loss per batch in progress bar
-            if accelerator.is_main_process:
-                progress_bar.set_postfix(loss=loss.item())
+            # if accelerator.is_main_process:
+            #     progress_bar.set_postfix(loss=loss.item())
+            progress_bar.set_postfix(loss=loss.item())
             
     all_logits_cat = torch.cat(all_logits)
     all_labels_cat = torch.cat(all_labels_list)

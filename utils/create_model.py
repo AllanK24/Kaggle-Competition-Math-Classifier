@@ -54,10 +54,11 @@ def create_qwen25_classifier(
             param.requires_grad = True
             
     # Unfreeze the last n decoder layers
-    total_layers = len(model.qwen_base.layers)
-    for i in range(total_layers - num_decoder_layers_to_unfreeze, total_layers):
-        for param in model.qwen_base.layers[i].parameters():
-            param.requires_grad = True
+    if num_decoder_layers_to_unfreeze > 0:
+        total_layers = len(model.qwen_base.layers)
+        for i in range(total_layers - num_decoder_layers_to_unfreeze, total_layers):
+            for param in model.qwen_base.layers[i].parameters():
+                param.requires_grad = True
     
     # Initialize tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_id)

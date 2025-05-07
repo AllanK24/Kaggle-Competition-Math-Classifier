@@ -46,24 +46,29 @@ def collate(batch, tokenizer: transformers.AutoTokenizer, max_length:int=None):
         "label": torch.tensor(labels)
     }
 
-def create_dataloaders(train_dataset_path, val_dataset_path, batch_size, num_workers, shuffle, tokenizer: transformers.AutoTokenizer, collate_fn=collate, max_length:int=None):
+def create_dataloaders(train_dataset_path, val_dataset_path, batch_size, num_workers, shuffle, tokenizer: transformers.AutoTokenizer, collate_fn=collate, max_length:int=None, seed:int=42):
     train_dataset = MathDataset(train_dataset_path)
     val_dataset = MathDataset(val_dataset_path)
     
     collate_fn = partial(collate_fn, tokenizer=tokenizer, max_length=max_length) # partial function to pass tokenizer and max_length, because collate function expects only one argument
+    
+    # Create the generator
+    g = torch.Generator()
+    g.manual_seed(seed)
     
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_size=batch_size,
         num_workers=num_workers,
         shuffle=shuffle,
-        collate_fn=collate_fn
+        collate_fn=collate_fn,
+        generator=g
     )
     val_dataloader = DataLoader(
         dataset=val_dataset,
         batch_size=batch_size,
         num_workers=num_workers,
         shuffle=False,
-        collate_fn=collate_fn
+        collate_fn=collate_fn,
     )
     return train_dataloader, val_dataloader

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from peft import LoraConfig
-from utils.qwen25.qwen25_classifier import Qwen25Classifier
+from utils.qwen25.qwen25_classifier_class import Qwen25Classifier
 from transformers import AutoConfig, AutoTokenizer, AutoModel
 
 def create_qwen25_classifier(

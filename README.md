@@ -1,4 +1,3 @@
-````markdown
 # 🧠 Qwen2.5 for Math Problem Classification – Kaggle Competition
 
 This repository contains the code and training pipeline for adapting **decoder-style large language models (LLMs)** for **multi-class classification**, specifically applied to the [Kasut Academy Math Problem Classification Competition](https://www.kaggle.com/competitions/classification-of-math-problems-by-kasut-academy/overview) on Kaggle.
@@ -82,7 +81,7 @@ LoraConfig(
     bias="all",
     inference_mode=False
 )
-````
+```
 
 **Hyperparameters**:
 

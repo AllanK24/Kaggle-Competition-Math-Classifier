@@ -1,15 +1,17 @@
 import os
 import wandb
 import torch
+from peft import LoraConfig
 from utils.train import train
 from huggingface_hub import login
 from accelerate import Accelerator
-from utils.constants import MODEL_ID
 from accelerate.utils import set_seed
 from utils.summarize_model import summarize_model
 from utils.create_dataloaders import create_dataloaders
-from utils.qwen25.create_qwen25 import create_qwen25_classifier
 from utils.llama32.create_llama32 import create_llama32_classifier
+from utils.qwen25.create_qwen25 import create_qwen25_classifier_with_lora
+
+MODEL_ID = "Qwen/Qwen2.5-3B"
 
 def main():
     # Set the seed for reproducibility
@@ -29,15 +31,28 @@ def main():
     
     wandb.login(key=secret_value_1)
     login(token=secret_value_0)
+
+    lora_config = LoraConfig(
+        r              = 16,         
+        lora_alpha     = 32,         
+        lora_dropout   = 0.1,       
+        target_modules = [
+            "q_proj", "k_proj",
+            "v_proj", "o_proj" 
+        ],
+    
+        bias           = "all",     
+        inference_mode = False 
+    )
     
     # Create the model and tokenizer
-    model, tokenizer = create_qwen25_classifier(
+    model, tokenizer = create_qwen25_classifier_with_lora(
         model_id=MODEL_ID,
         num_classes=8,
-        freeze_norm_layer=False,
-        freeze_embedding=True,
-        num_decoder_layers_to_unfreeze=5,
-        device="cuda"
+        add_dropout=True,
+        dropout_prob=0.5,
+        device="cuda",
+        lora_config=lora_config
     )
     
     # Print the model summary
@@ -46,7 +61,7 @@ def main():
     # Create train and val dataloaders
     train_data_path = "/kaggle/input/math-classifier-competition/train.csv"
     val_data_path = "/kaggle/input/math-classifier-competition/val.csv"
-    BATCH_SIZE = 2
+    BATCH_SIZE = 1
     NUM_WORKERS = os.cpu_count()
     
     train_dataloader, val_dataloader = create_dataloaders(
@@ -60,10 +75,10 @@ def main():
     
     # Set up the hyperparameters
     LEARNING_RATES = {
-        "base_model": 2e-5,
-        "classifier": 1e-4,
+        "base_model": 0.00005,
+        "classifier": 0.0001,
     }
-    EPOCHS = 3
+    EPOCHS = 5
     WEIGHT_DECAY = 0.001
     LABEL_SMOOTHING = 0.1
     # GRADIENT_ACCUMULATION_STEPS = 1
@@ -98,19 +113,16 @@ def main():
         "batch_size": BATCH_SIZE,
         "weight_decay": WEIGHT_DECAY,
         "label_smoothing": LABEL_SMOOTHING,
-        # "gradient_accumulation_steps": GRADIENT_ACCUMULATION_STEPS,
         "num_workers": NUM_WORKERS,
-        "dropout": 0.1,
-        "freeze_norm_layer": False,
-        "freeze_embedding": True,
-        "num_decoder_layers_to_unfreeze": 5,
+        "dropout": 0.5,
+        "lora": True
     }
     
     if accelerator.is_main_process:
         # Initialize wandb before training
         wandb.init(
             project='qwen25_math_classifier', # Project name
-            name='1st', # Run name
+            name='9th', # Run name
             config=config # Train config: lr, epochs and etc
         )
     
@@ -124,7 +136,7 @@ def main():
         epochs=EPOCHS,
         accelerator=accelerator,
         f1_avg_mode="macro",
-        checkpoint_every_n_epochs=1,
+        checkpoint_every_n_epochs=2,
         save_path="./finetuned_model/"
     )
     

@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "qwen25-math-classifier"
+name = "kaggle-math-classifier"
 version = "0.1.0"
 description = "A Python project for classifying mathematical expressions."
 license = { text = "MIT" }

@@ -2,13 +2,13 @@
 
 This repository contains the code and training pipeline for adapting **decoder-style large language models (LLMs)** for **multi-class classification**, specifically applied to the [Kasut Academy Math Problem Classification Competition](https://www.kaggle.com/competitions/classification-of-math-problems-by-kasut-academy/overview) on Kaggle.
 
-> 💡 **TL;DR**: Using Qwen2.5–3B with LoRA adapters, we surpassed the common 85% F1 barrier of encoder-based models and achieved **87% micro F1** on the validation set — demonstrating that LLMs, when carefully adapted, can significantly outperform traditional encoder classifiers in text classification tasks.
+> 💡 **TL;DR**: Using Qwen2.5–3B with LoRA adapters, the 85% F1 barrier of encoder-based models was surpassed and achieved **87% micro F1** on the validation set — demonstrating that LLMs, when carefully adapted, can significantly outperform traditional encoder classifiers in text classification tasks.
 
 ---
 
 ## 🚀 Overview
 
-The competition task was to classify math word problems into 8 distinct categories using natural language processing techniques. While initial experiments with encoder models like ModernBERT and MathBERT plateaued at ~85% F1, we achieved breakthrough performance by leveraging **decoder-based LLMs**, specifically the **Qwen 2.5 series**.
+The competition task was to classify math word problems into 8 distinct categories using natural language processing techniques. While initial experiments with encoder models like ModernBERT and MathBERT plateaued at ~85% F1, the breakthrough performance by leveraging **decoder-based LLMs**, specifically the **Qwen 2.5 series** was achieved.
 
 This repository contains a **production-ready training pipeline** using:
 - Hugging Face `transformers` & `accelerate`
@@ -41,7 +41,7 @@ This repository contains a **production-ready training pipeline** using:
 
 ## 🔬 Initial Encoder-Based Experiments (Baseline)
 
-Before moving to LLMs, we ran fine-tuning experiments on encoder-based models:
+Before moving to LLMs, few fine-tuning experiments on encoder-based models were conducted:
 
 | Model               | Validation Micro F1 |
 |--------------------|---------------------|
@@ -55,7 +55,7 @@ Despite extensive hyperparameter tuning and partial unfreezing, these models con
 
 ## 🧪 LLM Experiments
 
-We experimented with the following LLMs:
+Experiments were done with the following models:
 
 - ✅ [Qwen2.5–0.5B](https://huggingface.co/Qwen/Qwen2.5-0.5B)
 - ✅ [Qwen2.5–1.5B](https://huggingface.co/Qwen/Qwen2.5-1.5B)
@@ -69,7 +69,7 @@ We experimented with the following LLMs:
 ## 🏆 Best Model: Qwen 2.5–3B + LoRA
 
 **Custom classifier architecture**:  
-I used a dropout-regularized linear classifier head on top of the LLM’s final hidden state, with the sequence end position pooled using the attention mask.
+A dropout-regularized linear classifier head was used on top of the LLM’s final hidden state, with the sequence end position pooled using the attention mask.
 
 **LoRA Configuration**:
 ```python

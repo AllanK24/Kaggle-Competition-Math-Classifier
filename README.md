@@ -99,8 +99,8 @@ LoraConfig(
 
 > LoRA was crucial — full fine-tuning led to overfitting, while LoRA adapters enabled efficient, stable training even on **2× NVIDIA T4 GPUs**.
 
-⚡ Scaling Note
-Based on experimentation, scaling the Qwen2.5 model improves classification performance. While this repo uses Qwen2.5–3B, a larger model such as Qwen2.5–32B, fine-tuned with the same LoRA strategy, is expected to deliver even better results for this task.
+## ⚡ Scaling Note
+Based on experimentation, scaling the Qwen2.5 model improves classification performance. While this repo uses Qwen2.5–3B, a larger model such as Qwen2.5–32B for example, when fine-tuned with the same LoRA strategy, is expected to deliver even better results for this task.
 
 ---
 
